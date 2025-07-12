@@ -1,0 +1,43 @@
+model_name_or_path: <your model path>
+dataset: <your training dataset path>
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: q_proj,v_proj,k_proj,down_proj,up_proj,gate_proj,o_proj
+deepspeed: examples/deepspeed/dp_config_zero1.json
+
+### correction arguments
+correct_step: 160000
+pred_correct: False
+argument_correct: True   
+# pred_correct_prompt
+# argument_correct_prompt
+
+### dataset
+dataset: srl_format
+template: qwen # correspongding model type
+cutoff_len: 3072
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: <your saving path>
+logging_steps: 100
+save_strategy: steps
+save_steps: 20000
+max_steps: 200000
+save_total_limit: 6
+plot_loss: true
+
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 1
+learning_rate: 1.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+weight_decay: 0.05
+max_grad_norm: 1.0
+warmup_steps: 100
+fp16: true
+ddp_timeout: 180000000
+

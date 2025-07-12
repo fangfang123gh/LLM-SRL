@@ -1,0 +1,42 @@
+model_name_or_path: model_path
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+deepspeed: deepspeed_path
+
+# correction arguments
+correct_step: 100000
+pred_correct: True
+argument_correct: False   
+# pred_correct_prompt
+# argument_correct_prompt
+
+### dataset
+dataset: srl_format_pred_arg_token #在这里填写数据集地址
+template: qwen
+cutoff_len: 3072
+overwrite_cache: true
+preprocessing_num_workers: 8
+
+### output
+output_dir: output_path
+logging_steps: 100
+save_strategy: steps
+save_steps: 20000
+max_steps: 200000
+save_total_limit: 2
+plot_loss: true
+### train
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 1
+learning_rate: 1.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+weight_decay: 0.05
+max_grad_norm: 1.0
+warmup_steps: 100
+fp16: true
+ddp_timeout: 180000000
+

@@ -1,0 +1,4 @@
+model_name_or_path: /data1/hfmodel/qwen/Qwen2.5-7B-Instruct
+template: qwen
+infer_backend: vllm
+vllm_enforce_eager: true

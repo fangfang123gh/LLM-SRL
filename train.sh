@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=[your gpu id] llamafactory-cli train examples/train_lora/llama3_lora_sft_ds0.yaml

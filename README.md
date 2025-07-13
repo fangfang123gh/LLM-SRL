@@ -142,7 +142,7 @@ python process_rl_zh.py
 
 **Evaluation**:
 ```bash
-python evaluate.py
+python metric.py
 ```
 
 ---
@@ -158,7 +158,7 @@ LLM-SRL/
 ├── vllm_requirements.txt # vLLM dependencies
 ├── chat_*.py            # Inference scripts
 ├── process_rl_*.py      # Post-processing scripts
-└── evaluate.py          # Evaluation script
+└── metric.py          # Evaluation script
 ```
 
 ---

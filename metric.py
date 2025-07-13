@@ -31,27 +31,11 @@ def test_to_BES_graph(file_name, out_file_name):
             pred_begin, pred_end = pred['position']
             arcs[pred_begin - 1].append((0, '[prd]'))
 
-            # 谓词span也要识别
-            # for i in range(pred_begin, pred_end + 1):
-            #     if pred_begin == pred_end:
-            #         arcs[i - 1].append((pred_begin, 'S-V'))
-            #     else:
-            #         if i == pred_begin:
-            #             arcs[i - 1].append((pred_begin, 'B-V'))
-            #         elif i == pred_end:
-            #             arcs[i - 1].append((pred_begin, 'E-V'))
-            # 另一种谓词打标签的方式
-            for i in range(pred_begin + 1, pred_end + 1):
-                if pred_begin + 1 == pred_end:
-                    arcs[i - 1].append((pred_begin, 'S-V'))
-                else:
-                    if i == pred_begin + 1:
-                        arcs[i - 1].append((pred_begin, 'B-V'))
-                    elif i == pred_end:
-                        arcs[i - 1].append((pred_begin, 'E-V'))
             
             for arg in pred['arguments']:
                 arg_begin, arg_end = arg['position']
+                arg_begin = arg_begin - 1
+                arg_end = arg_end - 1
                 for i in range(arg_begin, arg_end + 1):
                     if arg_begin == arg_end:
                         arcs[i - 1].append((pred_begin, 'S-'+arg['role']))

@@ -1,186 +1,239 @@
-# LLM‑SRL
+# LLM-SRL: Semantic Role Labeling via Large Language Models
 
-This repository contains the code and prompt templates for the ACL Findings 2025 paper **“LLMs Can Also Do Well! Breaking Barriers in Semantic Role Labeling via Large Language Models”** by Xinxin Li\*, Huiyao Chen\*, Chengjun Liu, Jing Li, Meishan Zhang†, Jun Yu, Min Zhang.
+> **Paper**: "LLMs Can Also Do Well! Breaking Barriers in Semantic Role Labeling via Large Language Models"  
+> **Published**: ACL Findings 2025  
+> **Authors**: Xinxin Li*, Huiyao Chen*, Chengjun Liu, Jing Li, Meishan Zhang†, Jun Yu, Min Zhang
 
-> **Abstract (summary):**
-> Generative LLMs have historically underperformed compared to encoder–decoder models for SRL. We propose a two-stage framework combining **(1)** Retrieval‑Augmented Agent (to inject argument knowledge) and **(2)** Self‑Correction (to refine outputs iteratively), achieving state-of-the-art performance on CPB1.0, CoNLL‑2009, and CoNLL‑2012.
-![framework](./assets/framework.jpg)
----
+## 📖 Project Overview
 
-## 🚀 Key Contributions
+This project presents a novel two-stage framework for Semantic Role Labeling (SRL) using Large Language Models. By combining **Retrieval-Augmented Agent** and **Self-Correction Mechanism**, we achieve state-of-the-art performance on CPB1.0, CoNLL-2009, and CoNLL-2012 datasets.
 
-1. **Retrieval‑Augmented Agent**
-   – During predicate identification and argument labeling, we provide LLMs with external predicate–argument frame knowledge to enhance semantic accuracy.
+### 🎯 Key Innovations
 
-2. **Self‑Correction Mechanism**
-   – LLMs are trained to identify inconsistencies in their own SRL output and iteratively correct them, mitigating hallucinations and improving consistency.
+1. **Retrieval-Augmented Agent** - Injects external predicate-argument frame knowledge during predicate identification and argument labeling
+2. **Self-Correction Mechanism** - Trains LLMs to identify and iteratively correct inconsistencies in their own SRL outputs
+3. **Conversation-Based Two-Stage Architecture** - Stage 1: Predicate identification; Stage 2: Argument labeling
 
-3. **Conversation‑Based Two‑Stage Architecture**
-   – First stage: predicate identification; second stage: argument labeling; both bolster LLM reasoning via retrieval and self-correction.
+![Framework](https://github.com/fangfang123gh/LLM-SRL/raw/main/assets/framework.jpg)
 
 ---
 
-## 📦 Requirements
+## 🚀 Quick Start
 
-Install all dependencies using:
+### Environment Setup
 
+**Basic Environment**:
 ```bash
 pip install -r requirements.txt
 ```
 
-To accelerate inference using vLLM, create a separate environment and install:
-
+**vLLM Acceleration Environment** (Optional, for faster inference):
 ```bash
+# Create a separate conda environment
+conda create -n vllm-env python=3.8
+conda activate vllm-env
 pip install -r vllm_requirements.txt
 ```
 
 ---
 
-## 📊 Data Preprocessing
+## 📊 Data Preparation
 
-To replicate our experiments on CPB1.0 (Chinese), CoNLL-2009 (Chinese & English), and CoNLL-2012 (English), follow the instructions below.
+### Supported Datasets
 
-### 📌 CPB1.0
+| Dataset | Language | Source |
+|---------|----------|--------|
+| CPB1.0 | Chinese | [LDC2005T23](https://catalog.ldc.upenn.edu/LDC2005T23) |
+| CoNLL-2009 | Chinese & English | [LDC2012T03](https://catalog.ldc.upenn.edu/LDC2012T03) |
+| CoNLL-2012 | English | [Official Site](https://conll.cemantix.org/2012/data.html) |
 
-Chinese Proposition Bank 1.0 (LDC2005T23) is developed by [Linguistic Data Consortium (LDC)](https://catalog.ldc.upenn.edu/LDC2005T23).
+### Data Format
 
-Processed data format:
-
-```json
-{
-    "text": str,
-    "srl": [
-        {
-            "pred": str,
-            "position": [start, end],
-            "arguments": [
-                {"value": str, "position": [start, end], "role": str}
-            ]
-        }
-    ],
-    "token": []
-}
-```
-
-Note: `start` is the **1-based index** into the `token` list.
-
-### 📌 CoNLL-2009 & CoNLL-2012
-
-* CoNLL-2009 dataset is from [LDC2012T03](https://catalog.ldc.upenn.edu/LDC2012T03).
-* For CoNLL-2012, follow instructions from [deep\_srl GitHub](https://github.com/luheng/deep_srl) and [CoNLL official site](https://conll.cemantix.org/2012/data.html). 
-* The dev dataset shoud run
-```
-python sample_dev.py
-```
-
-Processed data format:
+The processed data format is JSON with the following structure:
 
 ```json
 {
-    "text": str,
-    "srl": [...],
-    "token": [],
-    "pos": [],
-    "lemmas": []
+  "text": "sentence text",
+  "srl": [
+      {
+          "pred": "predicate",
+          "position": [start_pos, end_pos],
+          "arguments": [
+              {
+                  "value": "argument_value", 
+                  "position": [start_pos, end_pos], 
+                  "role": "role_label"
+              }
+          ]
+      }
+  ],
+  "token": ["tokenized", "words"],
+  "pos": ["part-of-speech", "tags"],     // Required for CoNLL datasets
+  "lemmas": ["lemmatized", "forms"]      // Required for CoNLL datasets
 }
 ```
 
-Note: `start` uses **1-based token indexing**.
+> **Note**: Position indices use **1-based** numbering (starting from 1)
 
 ---
 
-## 🔧 Agent Construction
+## 🔧 Complete Pipeline
 
-Run the corresponding script in `./agent_scripts` for each dataset.
+### Step 1: Construct Agent Database
 
-This version separates **predicate-level descriptions** and **frame-level role explanations**.
+Run the appropriate scripts based on your dataset:
 
-* For **English datasets** (e.g., CoNLL-2012):
-
-  ```bash
-  python agent_scripts/construct_database_conll12_en.py
-  python agent_scripts/construct_agent_conll12_en.py
-  ```
-
-* For **Chinese datasets**:
-
-  ```bash
-  python agent_scripts/construct_database_zh.py
-  python gpt_infer.py
-  python get_chinese_pred_des.py
-  ```
-
----
-
-## ✏️ Conversation Instruction Generation
-
-Generate dataset-specific input instructions by running the appropriate script in the `agent_scripts/` directory.
-
-These files serve as the conversation-style inputs to LLMs during inference.
-
----
-
-## 🧪 Training
-
-Edit the training configuration in:
-
-```yaml
-examples/train_lora/llama3_lora_sft_ds0.yaml
+**English Datasets (CoNLL-2012)**:
+```bash
+python agent_scripts/construct_database_conll12_en.py
+python agent_scripts/construct_agent_conll12_en.py
 ```
 
-Then run training using:
+**Chinese Datasets (CPB1.0, CoNLL-2009 Chinese)**:
+```bash
+python agent_scripts/construct_database_zh.py
+python gpt_infer.py
+python get_chinese_pred_des.py
+```
+
+### Step 2: Generate Conversation Instructions
 
 ```bash
-bash train.sh
+# Run the instruction generation script for your dataset
+python agent_scripts/generate_instructions_[dataset].py
 ```
 
----
+### Step 3: Model Training
 
-## 🤖 Inference
+1. **Edit Training Configuration**:
+ ```bash
+ vim examples/train_lora/llama3_lora_sft_ds0.yaml
+ ```
 
-Run the appropriate `chat_*.py` script for each dataset.
-You can choose between:
+2. **Start Training**:
+ ```bash
+ # Adjust the training command based on your configuration
+ python train.py --config examples/train_lora/llama3_lora_sft_ds0.yaml
+ ```
 
-* **Standard HuggingFace-based inference**, or
-* **vLLM-accelerated inference** (for faster throughput)
+### Step 4: Model Inference
 
----
+Choose your inference method:
 
-## 📈 Evaluation
-
-After inference, run the following for post-processing:
-
+**Standard Inference**:
 ```bash
-python process_rl_en.py      # For English
-python process_rl_zh.py      # For Chinese
+python chat_[dataset].py
 ```
 
-Then evaluate using:
-
+**vLLM Accelerated Inference**:
 ```bash
-python metric.py
+python chat_[dataset]_vllm.py
+```
+
+### Step 5: Post-processing and Evaluation
+
+**Post-processing**:
+```bash
+# For English datasets
+python process_rl_en.py
+
+# For Chinese datasets  
+python process_rl_zh.py
+```
+
+**Evaluation**:
+```bash
+python evaluate.py
 ```
 
 ---
-## 📬 Citation
+
+## 📁 Project Structure
+
+```
+LLM-SRL/
+├── agent_scripts/          # Agent construction scripts
+├── examples/              # Training configuration examples
+├── assets/               # Project assets
+├── requirements.txt      # Basic dependencies
+├── vllm_requirements.txt # vLLM dependencies
+├── chat_*.py            # Inference scripts
+├── process_rl_*.py      # Post-processing scripts
+└── evaluate.py          # Evaluation script
+```
+
+---
+
+## 🎯 Usage Guidelines
+
+1. **First-time Users**: Recommend testing the complete pipeline on a small dataset first
+2. **Resource Requirements**: Training requires substantial GPU memory; inference can be accelerated with vLLM
+3. **Dataset Selection**: Choose appropriate language and dataset based on your task requirements
+4. **Parameter Tuning**: Adjust parameters in the training configuration file according to your specific task
+
+---
+
+## 📈 Performance
+
+Our method achieves state-of-the-art results on:
+- **CPB1.0** (Chinese Proposition Bank)
+- **CoNLL-2009** (Chinese & English)
+- **CoNLL-2012** (English)
+
+The two-stage framework with retrieval augmentation and self-correction significantly outperforms previous generative LLM approaches for SRL tasks.
+
+---
+
+## 🔬 Technical Details
+
+### Retrieval-Augmented Agent
+- Provides external predicate-argument frame knowledge
+- Enhances semantic accuracy during both stages
+- Reduces hallucinations in argument identification
+
+### Self-Correction Mechanism
+- Iteratively refines LLM outputs
+- Identifies and corrects inconsistencies
+- Improves overall labeling consistency
+
+### Two-Stage Architecture
+- **Stage 1**: Predicate identification with context understanding
+- **Stage 2**: Argument labeling with enhanced reasoning
+- Both stages benefit from retrieval and self-correction
+
+---
+
+## 📚 Citation
 
 If this work is helpful to your research, please cite:
 
 ```bibtex
 @article{DBLP:journals/corr/abs-2506-05385,
-  author       = {Xinxin Li and
-                  Huiyao Chen and
-                  Chengjun Liu and
-                  Jing Li and
-                  Meishan Zhang and
-                  Jun Yu and
-                  Min Zhang},
-  title        = {LLMs Can Also Do Well! Breaking Barriers in Semantic Role Labeling
-                  via Large Language Models},
-  year         = {2025},
-  url          = {https://doi.org/10.48550/arXiv.2506.05385},
+author    = {Xinxin Li and Huiyao Chen and Chengjun Liu and 
+             Jing Li and Meishan Zhang and Jun Yu and Min Zhang},
+title     = {LLMs Can Also Do Well! Breaking Barriers in Semantic Role Labeling
+             via Large Language Models},
+year      = {2025},
+url       = {https://doi.org/10.48550/arXiv.2506.05385},
 }
 ```
 
 ---
 
+## 🤝 Contributing
+
+- 📧 **Contact**: Please submit issues or contact the authors for questions
+- 🌟 **Star Support**: If this project helps you, please give it a star
+- 🔄 **Pull Requests**: Contributions and improvements are welcome
+
+---
+
+## 📄 License
+
+This project is released under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
+
+We thank the developers of the datasets and the open-source community for their valuable contributions to semantic role labeling research.

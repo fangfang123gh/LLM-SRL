@@ -18,6 +18,12 @@ This project presents a novel two-stage framework for Semantic Role Labeling (SR
 
 ---
 
+**📝 TODO**
+
+- Underway in the process of changing the paths to relative paths.
+
+---
+
 ## 🚀 Quick Start
 
 ### Environment Setup

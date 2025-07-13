@@ -28,6 +28,29 @@ def find_all_occurrences(key, word):
         start = idx + 1  # 支持重叠匹配，如 "aaa" 中找 "aa"
     return positions
 
+def convert_to_token_index(token, start_index, end_index):
+    token_start_index = 0
+    if start_index == 1:
+        token_start_index = 0
+    else:
+        c = 0
+        for i, t in enumerate(token):
+            if len(t) + c == start_index - 1:
+                token_start_index = i + 1
+                break
+            c = len(t) + c
+    
+    if end_index == len(text):
+        token_end_index = len(text) - 1
+    else:
+        c = 0
+        for i, t in enumerate(token):
+            if len(t) + c == end_index:
+                token_end_index = i
+                break
+            c = len(t) + c
+    return token_start_index + 1, token_end_index + 1
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Chat Demo")
 
@@ -313,6 +336,8 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                             min_dis = temp_dis
                             index = match_i
                 pred_arg = {'pred': word, 'position': [index, index + len(word) - 1], 'arguments': []}
+            token_start_index, token_end_index = convert_to_token_index(token, pred_arg['position'][0], pred_arg['position'][1])
+            pred_arg['position'] = [token_start_index, token_end_index]
             if args.dataset_type == 'cpb':
                 instruction = "在语义角色标注中，论元指的是语义上与给定谓词相关的成分或短语。它进一步描述了与句子中谓词相关的实体、动作或概念。"
                 instruction += "论元分为核心论元和附加论元。\n"
@@ -342,15 +367,19 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
 
             messages = messages[:8]
       
-            text = key[:]
+            text = token[:]
             pred = word
             position = pred_arg['position']
+
             if position[0] == 1:
-                text = '@@' + pred + '## ' + key[position[1]:] 
-            elif position[1] == len(key):
-                text = key[0:position[0]-1] + ' @@' + pred + '##'
+                text[position[0]-1] = '@@' + text[position[0]-1]
             else:
-                text = key[0:position[0]-1] + ' @@' + pred + '## ' + key[position[1]:] 
+                text[position[0]-1] = ' @@' + text[position[0]-1]
+            if position[1] == len(text):
+                text[position[1]-1] =text[position[1]-1]+ '##'  
+            else:
+                text[position[1]-1] = text[position[1]-1]+ '## '
+            text = ''.join(text) 
             question = f"Text: {text}\n给定谓词的论元及其对应的角色是什么？谓词由@@和##给定。\n"
             instruction = question
             

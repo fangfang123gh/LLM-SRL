@@ -128,33 +128,36 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
                     instruction += "所有核心论元的标签如下：\n"
                     instruction += "A0：执行动作或事件的实体\nA1：承受动作或事件的实体\nA2：根据谓词的不同，通常是动作或事件的目标或对象\nA3：根据谓词的不同，通常是动作或事件的间接接受者或受益者\nA4：根据谓词的不同，通常是动作或事件的来源或起源\n"
                 instruction += "请重新编写给定文本，并使用相应的<label>和</label>标签将论元的开头和结尾括起来。\n"
-                arg_str = text
+                arg_str = copy.deepcopy(token)
                 count = 0
                 flag = True
                 sorted_args = sorted(args, key=lambda x: x['position'][0])
+                # if position[0] == position[1]:
+                if position[0] == 1:
+                    arg_str[position[0]-1] = '@@' + arg_str[position[0]-1]
+                else:
+                    arg_str[position[0]-1] = ' @@' + arg_str[position[0]-1]
+                if position[1] == len(arg_str):
+                    arg_str[position[1]-1] =arg_str[position[1]-1]+ '##'  
+                else:
+                    arg_str[position[1]-1] = arg_str[position[1]-1]+ '## '  
                 for a in sorted_args:
-                    
+                    # if a['role'] == 'ARGM-PRX':
+                    #     continue
                     role = a['role']
-                    b, e = a['position']
-                    if b > position[0] and flag:
-                        if position[0] == 1:
-                            count += 5
-                        else:
-                            count += 6
-                        flag = False
-                    
-                    if e == len(key):
-                        arg_str = arg_str[0: b-1 + count] + ' <' + role + '>' + a['value'] + '</' + role + '>'
-                        count += len(' <' + role + '>' + '</' + role + '>')
-                    elif b == 1:
-                        arg_str = '<' + role + '>' + a['value'] + '</' + role + '> ' + arg_str[e+count:]
-                        count += len('<' + role + '>' + '</' + role + '> ')
+                    start, end = a['position']
+                    if start==1:
+                        arg_str[start - 1] = f'<{role}>' + arg_str[start - 1]
                     else:
-                        arg_str = arg_str[0: b-1 + count] + ' <' + role + '>' + a['value'] + '</' + role + '> ' + arg_str[e+count:]
-                        count += len(' <' + role + '>' + '</' + role + '> ')
+
+                        arg_str[start - 1] = f' <{role}>' + arg_str[start - 1]
+                    if end==len(arg_str):
+                        arg_str[end - 1] = arg_str[end - 1] + f'</{role}>'
+                    else:
+                        arg_str[end - 1] = arg_str[end - 1] + f'</{role}> '
 
                 conversations.append({"from": "human", "value": instruction})
-                gpt_template = {"from": "gpt", "value": arg_str}
+                gpt_template = {"from": "gpt", "value": ''.join(arg_str) }
                 conversations.append(gpt_template)
                 datas.append({'conversations': conversations, 'system': "你是一个有语言学背景并且善于理解文本，特别是在语义角色标注方面熟练的有帮助的助手。"})
 

@@ -112,8 +112,7 @@ python agent_scripts/generate_instructions_[dataset].py
 
 2. **Start Training**:
  ```bash
- # Adjust the training command based on your configuration
- python train.py --config examples/train_lora/llama3_lora_sft_ds0.yaml
+ bash train.sh
  ```
 
 ### Step 4: Model Inference

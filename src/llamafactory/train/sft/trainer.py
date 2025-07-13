@@ -718,8 +718,6 @@ def find_reason(pred, gold):
         reason += '有未识别的论元\n'
     return reason
                     
-# 判断输出谓词的格式是否正确、每一个谓词是否识别正确以及是否有忽略的谓词。谓词识别结果的格式与之前保持一致，输出格式示例为：\"存在问题：论元跨度不正确\n论元标注结果：\"。如果不存在错误，则输出停止检查。
-
 
 def extract_issue_segment(text):
     """
@@ -852,9 +850,6 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                 user_suffix = '<|eot_id|>\n'
                 signal = '<|start_header_id|>'
                 lang = 'en'
-
-            # initial_output_pred = None
-            # outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
             with torch.no_grad():
                 
                 batch_labels = []
@@ -863,8 +858,7 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                 for i,l in enumerate(label):
                     l = l.item()
                     if l == -100 and start != -1:
-                
-                        # batch_labels[batch_idx].append(self.tokenizer.decode(label[start: i]))
+            
                         batch_labels.append(label[start: i])
                         start = -1
                     elif l != -100 and start == -1:
@@ -881,7 +875,13 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                         
                     else:
                         is_terminate = True
-                        # 正常进行forward
+                        signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                        possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                    
+                        new_input_ids = input_ids[:, :possible_starts[5]]
+                        new_attention_mask = attention_mask[:, :possible_starts[5]]
+                        new_labels_ids = label_ids[:,:possible_starts[5]]
+                        inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                         outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                         loss = outputs['loss']
                     
@@ -889,25 +889,9 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                         
                         signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
                         possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
-                        
-
-                        # critic_input_ids = input_ids[:,:possible_starts[4]]
-                        # print("posssible_starts", possible_starts)
-                        
-                        # 谓词结果应该是output
-                        # print(len(possible_starts))
-                        # new_input_ids = input_ids[:, :possible_starts[4]]
-                        # new_attention_mask = attention_mask[:, :possible_starts[4]]
-                        # new_labels_ids = label_ids[:,:possible_starts[4]]
-                        # print("new_input_ids 4", self.tokenizer.batch_decode(new_input_ids,skip_special_tokens=True))
                         new_input_ids = input_ids[:, :possible_starts[5]]
                         new_attention_mask = attention_mask[:, :possible_starts[5]]
                         new_labels_ids = label_ids[:,:possible_starts[5]]
-                        # print("new_input_ids 5", self.tokenizer.batch_decode(new_input_ids,skip_special_tokens=True))
-                        # new_input_ids = input_ids[:, :possible_starts[6]]
-                        # new_attention_mask = attention_mask[:, :possible_starts[6]]
-                        # new_labels_ids = label_ids[:,:possible_starts[6]]
-                        # print("new_input_ids 6", self.tokenizer.batch_decode(new_input_ids,skip_special_tokens=True))
                         inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                         with torch.no_grad():
                             # 因为还要纠错 所以是还不进行forward的
@@ -915,18 +899,11 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
 
                             text = self.tokenizer.decode(input_ids[:, possible_starts[3]:possible_starts[4]][0], skip_special_tokens=True)
                             # print("text", text)
-                            text = extract_pred_text(text)
+                            text = extract_pred_text_zh(text)
                             logits = torch.argmax(outputs.logits, dim=-1)
                             output_result_ori = self.tokenizer.batch_decode(logits,skip_special_tokens=True)
                             # output_result_ori = self.tokenizer.batch_decode(logits,skip_special_tokens=False)
                             output_result_ori = output_result_ori[0]
-                            # print("output_result_ori", output_result_ori)
-                            # output_result_processed = output_result_ori[0].lower().split('assistant')
-                            # print("output_result", output_result)
-                            # print("output_result_processed", output_result_processed)
-                            
-                            # output_result = output_result_processed[-1]
-                            # output_result = output_result.strip()
                             assistant_idx = output_result_ori.lower().rfind("assistant")
                             user_idx = output_result_ori.lower().rfind("user")
                             # print("output_result_ori", output_result_ori)
@@ -954,8 +931,6 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                             if '语义角色标注' in output_result or '它的意思' in output_result:
                                 is_not_cal = True
                         if is_not_cal or new_input_ids.shape[-1] > max_length:
-                            # print("new_input_ids.shape[-1] > max_length", new_input_ids.shape[-1] > max_length)
-                            # print("is_not_cal", is_not_cal)
                             # 这时候才需要进行forwrd
                             inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                             outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
@@ -978,8 +953,6 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                                 gold_output += '谓词识别结果：\n'+ ground_truth
                             # else:
                             gold_output +=user_suffix
-                            
-                            # prompt ='''重新思考生成的谓词识别结果，判断输出谓词的格式是否正确、每一个谓词是否识别正确以及是否有忽略的谓词，结合检查错误进行纠正。如果生成的文本与原文本不一致，只需要输出该错误，不需要判断其他错误。谓词识别结果的格式与之前保持一致，输出格式示例为：\"存在问题：...\n谓词识别结果：\n"。如果不存在错误，则输出停止检查。\n原文本: <<text>>\n需要思考的输出结果： <<output>>\n输出：\n'''
                             prompt ='''重新思考生成的谓词识别结果，判断输出谓词的格式是否正确、每一个谓词是否识别正确以及是否有忽略的谓词，结合检查错误进行纠正。谓词识别结果的格式与之前保持一致，输出格式示例为：\"存在问题：...\n谓词识别结果：\n"。如果不存在错误，则输出停止检查。\n原文本: <<text>>\n需要思考的输出结果： <<output>>\n输出：\n'''
 
 
@@ -1048,13 +1021,6 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                                     argument_result = output_result[output_result.rfind('谓词识别结果：')+len('谓词识别结果：'):]
                                 else:
                                     is_break = True
-                                # 严格按照格式输出
-                                # elif '识别结果：' in output_result:
-                                #     argument_result = output_result[output_result.rfind('识别结果：')+len('识别结果：'):]
-                                # elif '结果：' in output_result:
-                                #     argument_result = output_result[output_result.rfind('结果：')+len('结果：'):]
-                                # else:
-                                #     argument_result = output_result
                                 
 
 
@@ -1138,13 +1104,6 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                                             argument_result = output_result[output_result.rfind('谓词识别结果：')+len('谓词识别结果：'):]
                                         else:
                                             is_break = True
-                                        # elif '识别结果：' in output_result:
-                                        #     argument_result = output_result[output_result.rfind('识别结果：')+len('识别结果：'):]
-                                        # elif '结果：' in output_result:
-                                        #     argument_result = output_result[output_result.rfind('结果：')+len('结果：'):]
-                                        # else:
-                                        #     argument_result = output_result
-                                        
 
 
                                         if not is_break:
@@ -1211,6 +1170,17 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                                 inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                                 outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                                 loss += outputs['loss']
+                else:
+                    
+                    signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                    possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                
+                    new_input_ids = input_ids[:, :possible_starts[5]]
+                    new_attention_mask = attention_mask[:, :possible_starts[5]]
+                    new_labels_ids = label_ids[:,:possible_starts[5]]
+                    inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
+                    outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
+                    loss += outputs['loss']
             elif lang == 'en':
                 if self.finetuning_args.pred_correct:
                     
@@ -1525,6 +1495,16 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                                 inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                                 outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                                 loss += outputs['loss']
+                else:
+                    signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                    possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                
+                    new_input_ids = input_ids[:, :possible_starts[5]]
+                    new_attention_mask = attention_mask[:, :possible_starts[5]]
+                    new_labels_ids = label_ids[:,:possible_starts[5]]
+                    inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
+                    outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
+                    loss += outputs['loss']
             if lang == 'zh':
                 if self.finetuning_args.argument_correct:
                     is_terminate = False
@@ -1536,21 +1516,19 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                         
                     else:
                         is_terminate = True
+                        signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                        possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                        
+                        new_input_ids = input_ids[:, possible_starts[5]:]
+                        new_attention_mask = attention_mask[:, possible_starts[5]:]
+                        new_labels_ids = label_ids[:,possible_starts[5]:]
+                        inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                         outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                         loss += outputs['loss']
-                        # if ''
-                        # print("ground_truth", ground_truth)
-
-                        # input_decode = self.tokenizer.decode(input_ids[0])
-                        # print('input_decode', input_decode)
-                        # signal = '<|im_start|>user\n在语义角色标注中，论元指的是语义上与给定谓词相关的成分或短语。'
-                        # signal = self.tokenizer.convert_tokens_to_ids('<|im_start|>')
-                        # if not
                     
                     if not is_terminate:
-                        if self.finetuning_args.argument_correct:
-                            signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
-                            possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                        signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                        possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
                         
                         new_input_ids = input_ids[:, possible_starts[5]:]
                         new_attention_mask = attention_mask[:, possible_starts[5]:]
@@ -1560,19 +1538,12 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                             outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                             text = self.tokenizer.decode(input_ids[:, possible_starts[3]:possible_starts[4]][0], skip_special_tokens=True)
                             # print("text", text)
-                            text = extract_pred_text(text)
+                            text = extract_pred_text_zh(text)
 
                             logits = torch.argmax(outputs.logits, dim=-1)
                             output_result_ori = self.tokenizer.batch_decode(logits,skip_special_tokens=True)
                             # output_result_ori = self.tokenizer.batch_decode(logits,skip_special_tokens=False)
                             output_result_ori = output_result_ori[0]
-                            # print("output_result_ori", output_result_ori)
-                            # output_result_processed = output_result_ori[0].lower().split('assistant')
-                            # print("output_result", output_result)
-                            # print("output_result_processed", output_result_processed)
-                            
-                            # output_result = output_result_processed[-1]
-                            # output_result = output_result.strip()
                             assistant_idx = output_result_ori.lower().rfind("assistant")
                             user_idx = output_result_ori.lower().rfind("user")
 
@@ -1854,6 +1825,16 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                                 inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                                 outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                                 loss += outputs['loss']
+                else:
+                    signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                    possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                    
+                    new_input_ids = input_ids[:, possible_starts[5]:]
+                    new_attention_mask = attention_mask[:, possible_starts[5]:]
+                    new_labels_ids = label_ids[:,possible_starts[5]:]
+                    inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
+                    outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
+                    loss += outputs['loss']
             elif lang == 'en':
                 if self.finetuning_args.argument_correct:
                     is_terminate = False
@@ -1867,20 +1848,11 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                         is_terminate = True
                         outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                         loss += outputs['loss']
-                        # if ''
-                        # print("ground_truth", ground_truth)
 
-                        # input_decode = self.tokenizer.decode(input_ids[0])
-                        # print('input_decode', input_decode)
-                        # signal = '<|im_start|>user\n在语义角色标注中，论元指的是语义上与给定谓词相关的成分或短语。'
-                        # signal = self.tokenizer.convert_tokens_to_ids('<|im_start|>')
-                        # if not
-                    
                     if not is_terminate:
-                        if self.finetuning_args.argument_correct:
-                            signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
-                            possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
-                        
+                        signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                        possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                    
                         new_input_ids = input_ids[:, possible_starts[5]:]
                         new_attention_mask = attention_mask[:, possible_starts[5]:]
                         new_labels_ids = label_ids[:,possible_starts[5]:]
@@ -1897,13 +1869,7 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                             output_result_ori = self.tokenizer.batch_decode(logits,skip_special_tokens=True)
                             # output_result_ori = self.tokenizer.batch_decode(logits,skip_special_tokens=False)
                             output_result_ori = output_result_ori[0]
-                            # print("output_result_ori", output_result_ori)
-                            # output_result_processed = output_result_ori[0].lower().split('assistant')
-                            # print("output_result", output_result)
-                            # print("output_result_processed", output_result_processed)
-                            
-                            # output_result = output_result_processed[-1]
-                            # output_result = output_result.strip()
+
                             assistant_idx = output_result_ori.lower().rfind("assistant")
                             user_idx = output_result_ori.lower().rfind("user")
 
@@ -1914,9 +1880,6 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
                                 output_result = output_result_ori[user_idx + len("user"):]
                                 # print("提取 user 后的文本：\n", output_result)
                             output_result = output_result.strip()
-                            # if  '我已经理解' in output_result:
-                            #     output_result_processed = output_result_ori[0].lower().split('user')
-                            #     output_result = output_result_processed[-1]
                             if  'i have understood' in output_result.lower():
                                 is_not_cal = True
                             if len(output_result) != 0:
@@ -2228,6 +2191,16 @@ Output:
                                 inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                                 outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
                                 loss += outputs['loss']
+                else:
+                    signal_tensor = self.tokenizer(signal, add_special_tokens=False, return_tensors='pt')['input_ids'].to(input_ids.device).to(input_ids.dtype)
+                    possible_starts = torch.where(input_ids[0] == signal_tensor[0][0])[0]
+                    
+                    new_input_ids = input_ids[:, possible_starts[5]:]
+                    new_attention_mask = attention_mask[:, possible_starts[5]:]
+                    new_labels_ids = label_ids[:,possible_starts[5]:]
+                    inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
+                    outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)
+                    loss += outputs['loss']
             if isinstance(loss, float):
                 inputs = {'attention_mask': new_attention_mask, "input_ids":new_input_ids, 'labels':new_labels_ids}
                 outputs = model(**inputs, output_hidden_states=True, return_dict=True, use_cache=False)

@@ -227,12 +227,6 @@ url       = {https://doi.org/10.48550/arXiv.2506.05385},
 
 ---
 
-## 📄 License
-
-This project is released under the MIT License. See [LICENSE](LICENSE) for details.
-
----
-
 ## 🙏 Acknowledgments
 
 We thank the developers of the datasets and the open-source community for their valuable contributions to semantic role labeling research.

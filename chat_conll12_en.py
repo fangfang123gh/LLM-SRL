@@ -13,7 +13,6 @@ from gradio import processing_utils
 from tqdm import tqdm
 import json
 import pickle
-from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer,AutoModelForCausalLM
 from transformers import GenerationConfig
 from peft import PeftModel
@@ -124,16 +123,18 @@ with open(args.pred_database_path, 'rb') as f:
 with open(args.agent_path, 'rb') as f:
     pred_agent = pickle.load(f)
 
-
-sampling_params = SamplingParams(temperature=args.temperature, top_p=args.top_p, repetition_penalty=1, max_tokens=args.max_tokens)
+generation_config = GenerationConfig(
+    temperature=args.temperature,
+    top_p=args.top_p,
+    repetition_penalty=args.repetition_penalty,
+    max_new_tokens=args.max_tokens,
+    do_sample=True,
+)
 
 tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
 
-llm = LLM(
-    model=args.model_path,
-    tokenizer=args.model_path,
-    dtype="float16",  # 或 "auto"
-)
+model = AutoModelForCausalLM.from_pretrained(args.model_path, trust_remote_code=True, torch_dtype=torch.float16).cuda()
+model.eval()
 
 print('Initialization Finished')
 
@@ -173,12 +174,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True) 
 
-        output = llm.generate(
-            [prompt],
-            sampling_params=sampling_params
-        )
-
-        response = output[0].outputs[0].text
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+        with torch.no_grad():
+            outputs = model.generate(input_ids, generation_config=generation_config)
+        response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
         messages.append({'role': 'assistant', 'content': response})
         print(response+'\n')
         
@@ -257,12 +256,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True) 
     
-        output = llm.generate(
-            [prompt],
-            sampling_params=sampling_params
-        )
-
-        response = output[0].outputs[0].text
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+        with torch.no_grad():
+            outputs = model.generate(input_ids, generation_config=generation_config)
+        response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
 
         pre_response = None
         initial_response = response
@@ -281,12 +278,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True)  
 
-            output = llm.generate(
-                [prompt],
-                sampling_params=sampling_params
-            )
-
-            response = output[0].outputs[0].text
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+            with torch.no_grad():
+                outputs = model.generate(input_ids, generation_config=generation_config)
+            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             messages.append({"role": "assistant", "content": response})
             print("response", response)
         
@@ -392,12 +387,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True)  
           
-            output = llm.generate(
-                [prompt],
-                sampling_params=sampling_params
-            )
-
-            response = output[0].outputs[0].text
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+            with torch.no_grad():
+                outputs = model.generate(input_ids, generation_config=generation_config)
+            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             messages.append({"role": "assistant", "content": response})
 
             messages = messages[:8]
@@ -515,12 +508,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True)  
 
-            output = llm.generate(
-                [prompt],
-                sampling_params=sampling_params
-            )
-
-            response = output[0].outputs[0].text
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+            with torch.no_grad():
+                outputs = model.generate(input_ids, generation_config=generation_config)
+            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             pre_response = None
             initial_response = response
             print("initial response", response)
@@ -560,11 +551,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                 #     generation_config=generation_config
                 # )
                 # response = tokenizer.decode(output[0][len(input_ids[0]):], skip_special_tokens=True)
-                output = llm.generate(
-                    [prompt],
-                    sampling_params=sampling_params
-                )
-                response = output[0].outputs[0].text
+                input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+                with torch.no_grad():
+                    outputs = model.generate(input_ids, generation_config=generation_config)
+                response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
                 messages.append({"role": "assistant", "content": response})
                 print("response", response)
                 if "stop checking" in response.lower():

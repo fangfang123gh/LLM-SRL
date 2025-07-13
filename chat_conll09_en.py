@@ -13,7 +13,6 @@ from gradio import processing_utils
 from tqdm import tqdm
 import json
 import pickle
-from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer,AutoModelForCausalLM
 from transformers import GenerationConfig
 from peft import PeftModel
@@ -118,22 +117,25 @@ for arg, value in vars(args).items():
     print("%s: %s" % (arg, value))
 print("------------------------------------------------")
 
+
 with open(args.pred_database_path, 'rb') as f:
     preds_dict = pickle.load(f)
 
 with open(args.agent_path, 'rb') as f:
     pred_agent = pickle.load(f)
 
+generation_config = GenerationConfig(
+    temperature=args.temperature,
+    top_p=args.top_p,
+    repetition_penalty=args.repetition_penalty,
+    max_new_tokens=args.max_tokens,
+    do_sample=True,
+)
 
-sampling_params = SamplingParams(temperature=args.temperature, top_p=args.top_p, repetition_penalty=1, max_tokens=args.max_tokens)
 
 tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
-
-llm = LLM(
-    model=args.model_path,
-    tokenizer=args.model_path,
-    dtype="float16",  # 或 "auto"
-)
+model = AutoModelForCausalLM.from_pretrained(args.model_path, trust_remote_code=True, torch_dtype=torch.float16).cuda()
+model.eval()
 
 print('Initialization Finished')
 
@@ -173,12 +175,11 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True) 
 
-        output = llm.generate(
-            [prompt],
-            sampling_params=sampling_params
-        )
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+        with torch.no_grad():
+            outputs = model.generate(input_ids, generation_config=generation_config)
+        response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
 
-        response = output[0].outputs[0].text
         messages.append({'role': 'assistant', 'content': response})
         print(response+'\n')
         
@@ -197,57 +198,29 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     if temp_lemma in preds_dict:
                         maybe_pred_pos.append(i)
                         maybe_pred_token.append(temp_lemma)
-
+            
                 else:
-                    
-                    lemma = getLemma(t, 'NOUN')
-                    for l in lemma:
-
-                        if l in preds_dict:
-                            maybe_pred_pos.append(i)
-                            maybe_pred_token.append(l)
-                            break
-                    if i not in maybe_pred_pos:
-                        lemma = getLemma(t, 'VERB')
-                        for l in lemma:
-
-                            if l in preds_dict:
-                                maybe_pred_token.append(l)
-                                maybe_pred_pos.append(i)
-                                break    
+                    wn_tag = penn_to_wordnet(pos[i])
+                    if wn_tag is not None:
+                        if lemmatizer.lemmatize(token[i], pos=wn_tag) in preds_dict:
+                            maybe_pred_pos.append(i)       
+                            maybe_pred_token.append(lemmatizer.lemmatize(token[i], pos=wn_tag) )        
                 i += 1
 
             all_maybe_pr_str = copy.deepcopy(token)
+            # maybe_pred_token = set(maybe_pred_token)
+            # maybe_pred_token = list(maybe_pred_token)
             pred_agent_des = ''
-            maybe_pred_token = set(maybe_pred_token)
-            maybe_pred_token = list(maybe_pred_token)
             for t in maybe_pred_token:
                 for key, value in pred_agent[t].items():
-                    temp = ''
                     if len(value) != 0:
                         pos_name = 'noun' if key == 'n' else 'verb'
-                        temp += f'When the {pos_name} "{t}" functions as a predicate, its interpretation is: '
-            
-                        unique_value = []
-                        for i,v in enumerate(value):
-                            find = False
-                            for j,vv in enumerate(value):
-                                if i != j:
-                                    if v in vv or v== t:
-                                        find = True
-                                        break
-                            if not find:
-                                unique_value.append(v)
-                        if len(unique_value) == 0:
-                            temp = ''
-                        else:
-                            temp += ", ".join(unique_value) + '\n'
-                    pred_agent_des += temp
+                        pred_agent_des += f'When the {pos_name} {t} functions as a predicate, its interpretation is: {", ".join(value)}\n'
+                
 
             for a in maybe_pred_pos:
                 all_maybe_pr_str[a] ='@@'+ all_maybe_pr_str[a] + '##'
             all_maybe_pr_str = ' '.join(all_maybe_pr_str)
-
             question = f"Text: {text}\nFor the SRL task, what are the predicates in the given text? Possible predicate results in the text are: {all_maybe_pr_str}\nwhere predicates are specified by @@ and ##.\nBased on the given possible predicate results, please rewrite the given text, marking the beginning and end of predicates with @@ and ## respectively. Note that words not present in the predicate results may also be predicates.\n"+pred_agent_des
         else:
             question = f"Text: {text}\nFor the SRL task, what are the predicates in the given text? Please rewrite the given text, marking the beginning and end of predicates with @@ and ## respectively. \n"
@@ -257,12 +230,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True) 
     
-        output = llm.generate(
-            [prompt],
-            sampling_params=sampling_params
-        )
-
-        response = output[0].outputs[0].text
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+        with torch.no_grad():
+            outputs = model.generate(input_ids, generation_config=generation_config)
+        response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
 
         pre_response = None
         initial_response = response
@@ -281,12 +252,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True)  
 
-            output = llm.generate(
-                [prompt],
-                sampling_params=sampling_params
-            )
-
-            response = output[0].outputs[0].text
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+            with torch.no_grad():
+                outputs = model.generate(input_ids, generation_config=generation_config)
+            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             messages.append({"role": "assistant", "content": response})
             print("response", response)
         
@@ -379,11 +348,12 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
             instruction = "In SRL, arguments refer to the components or phrases semantically related to a given predicate. They further describe the entities, actions, or concepts associated with the predicate in the sentence."
             instruction += "Arguments are divided into core arguments and adjunct arguments.\n"
             instruction += "The labels for all adjunct arguments are as follows:\n"
-            instruction += 'ARGM-EXT: extent\nARGM-LOC: location\nARGM-DIR: direction\nARGM-NEG: negation  (not in PREDITOR)\n'
-            instruction += 'ARGM-MOD: general modification\nARGM-ADV: adverbial modification\nARGM-MNR: manner\nARGM-PRD: secondary predication\n'
-            instruction += 'ARGM-REC: recipricol (eg herself, etc)\nARGM-TMP: temporal\nARGM-PRP: purpose\nARGM-PNC: purpose no cause\nARGM-CAU: cause\n'
-            instruction += 'ARGM-ADJ: adjectival (nouns only)\nARGM-COM: comitative\nARGM-DIS: discourse\nARGM-DSP: direct speech\n'
-            instruction += 'ARGM-GOL: goal\nARGM-LVB: light verb (for nouns only)\nARGA: secondary agent\nARGM-PRR: predicating relation\n'
+            instruction += 'AM-TMP: temporal\nAM-LOC: location\nAM-MNR: manner\nAM-NEG: negation\n'
+            instruction += 'AM-MOD: general modification\nAM-DIS: discourse\nAM-EXT: extent\nAM-ADV: adverbial modification\n'
+            instruction += 'AM-PNC: purpose no cause\nAM-DIR: direction\nAM-PRD: secondary predication\nAM-CAU: cause\nAM: argument modification'
+            instruction += 'AM-REC: recipricol (eg herself, etc)\nAM-PRT: particle\n'
+            instruction+= 'AA: secondary agent\n'
+
             instruction += "Core arguments depend on the predicate, and a predicate may have different core argument frames. Within these frames, core arguments will have different interpretations.\n"
 
             messages.append({"role": "user", "content": instruction})
@@ -392,12 +362,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True)  
           
-            output = llm.generate(
-                [prompt],
-                sampling_params=sampling_params
-            )
-
-            response = output[0].outputs[0].text
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+            with torch.no_grad():
+                outputs = model.generate(input_ids, generation_config=generation_config)
+            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             messages.append({"role": "assistant", "content": response})
 
             messages = messages[:8]
@@ -408,37 +376,46 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                 # 框架的组织
                 frameset_str = ''
                 framesets = {}
-                lemma = word
+                lemma = ''
                 if lemma not in preds_dict:
-                    lemma= word.lower()
+                    lemma = pred
+                if lemma not in preds_dict:
+                    lemma = pred.lower()
                 if lemma not in preds_dict:
                     if lemmas[start - 1] != '-':
                         lemma = lemmas[start - 1]
                 if lemma not in preds_dict:
-                    lemma = getLemma(t, 'NOUN')
-                    for l in lemma:
-
-                        if l in preds_dict:
-                            lemma = l
+                    lemma_list = getLemma(pred.lower(), penn_to_lemma(pos[start - 1]))
+                    for lemma in lemma_list:
+                        if lemma in preds_dict:
                             break
-                    if i not in maybe_pred_pos:
-                        lemma = getLemma(t, 'VERB')
-                        for l in lemma:
-
-                            if l in preds_dict:
-                                lemma = l
-                                break    
                 
+                if lemma not in preds_dict:
+                    lemma_list = getLemma(pred.lower(), 'VERB')
+                    for lemma in lemma_list:
+                        if lemma in preds_dict:
+                            break
+                if lemma== 'liquefy':
+                    lemma = 'liquify'
+                if lemma not in preds_dict:
+                    t= lemma
+                    i = start - 1
+                    if i != 0 and token[i-1] == '-':
+                        temp_lemma = lemmas[i-2]
+                        if ( temp_lemma+t) in preds_dict:
+                            lemma = temp_lemma+t
+                        elif ( temp_lemma +'-'+ t ) in preds_dict:
+                            lemma = temp_lemma +'-'+ t 
+                    elif i != len(token) - 1 and token[i + 1] == '-':
+                        temp_lemma = lemmas[i+2]
+                        if ( t + temp_lemma ) in preds_dict:
+                            lemma = t + temp_lemma
+                        elif ( t +'-'+ temp_lemma ) in preds_dict:
+                            lemma=  t +'-'+ temp_lemma
                 if lemma in preds_dict:
-                    # framesets = preds_dict[lemma]
-                    # 得往后看 是不是短语了
-                    # 最大短语长度是5 本身自己就算一个长度了 所以+4就行了
                     framesets = {}
                     temp_word = lemma
                     
-                    # if v_or_n == 'n':
-                    #     framesets = preds_dict[lemma][lemma] 
-                    # else:
                     for j in range(1, 5):
                         if start + j <= len(token):
                             if token[start + j - 1] == '-':
@@ -452,17 +429,16 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                         if lemma in preds_dict[lemma]:
                             # framesets.append(preds_dict[lemma][lemma])
                             framesets[lemma] = preds_dict[lemma][lemma]
-                        
-                        # else:
-                        #     frameset_str = '没有相应的核心论元'
-                    
-                        # framesets = framesets[v_or_n]          
+                
+                if lemma in preds_dict:
+                    for k, _ in preds_dict[lemma].items():
+                        # framesets.append(preds_dict[lemma][k])
+                        framesets[k] = preds_dict[lemma][k]
 
                 
                 if len(framesets) == 0:
                     if pred in preds_dict:
                         if pred in preds_dict[pred]:
-                            # framesets.append(preds_dict[pred][pred] )
                             framesets[pred] = preds_dict[pred][pred]
                         
                         else:
@@ -474,13 +450,11 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                         if lemma in preds_dict[lemma]:
                             # framesets.append(preds_dict[lemma][lemma] )
                             framesets[lemma] = preds_dict[lemma][lemma]
+                            # framesets = framesets[v_or_n]
                         else:
                             if len(preds_dict[lemma]) != 0:
-                                # framesets[lemma] =[]
                                 for key, value in preds_dict[lemma].items():
-                                    # framesets.append(value)
-                                    # framesets[lemma].append(value)
-                                    framesets[key] = value
+                                    framesets.append(value)
                 
 
                 for frame_name, frameset in framesets.items():
@@ -494,8 +468,7 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                             frameset_str += f'Frame {fram_index + 1}:\nThe core arguments it has are:\n'
                             for frame_role, frame_exp in f.items():
                                 # frameset_str += f"ARG{frame_role}: {frame_exp}\n"
-                                frameset_str += f"ARG{frame_role}: {frame_exp}\n" 
-
+                                frameset_str += f"A{frame_role}: {frame_exp}\n" 
 
                 if len(frameset_str) != 0:
                     instruction += f'For the predicate "{pred}" in this text, it has the following frames:\n'
@@ -504,10 +477,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                 
                 else:
                     instruction += "The labels for all core arguments are as follows:\n"
-                    instruction += "ARG0: agent\nARG1: patient\nARG2: instrument, benefactive, attribute\nARG3: starting point, benefactive, attribute\nARG4: ending point\nARG5: depend on predicate"
+                    instruction += "A0: agent\nA1: patient\nA2: instrument, benefactive, attribute\nA3: starting point, benefactive, attribute\nA4: ending point\nA5: depend on predicate"
             else:
                 instruction += "The labels for all core arguments are as follows:\n"
-                instruction += "ARG0: agent\nARG1: patient\nARG2: instrument, benefactive, attribute\nARG3: starting point, benefactive, attribute\nARG4: ending point\nARG5: depend on predicate"
+                instruction += "A0: agent\nA1: patient\nA2: instrument, benefactive, attribute\nA3: starting point, benefactive, attribute\nA4: ending point\nA5: depend on predicate"
             instruction += '"R-" arguments are arguments that are referencing another argument in the sentence. "C-" arguments are discontinous spans that all refer to the same argument. Please rewrite the given text and enclose the beginning and end of the arguments with the corresponding <label> and </label> tags.\n'
             messages.append({"role": "user", "content": instruction})
             prompt = tokenizer.apply_chat_template(
@@ -515,12 +488,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True)  
 
-            output = llm.generate(
-                [prompt],
-                sampling_params=sampling_params
-            )
-
-            response = output[0].outputs[0].text
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+            with torch.no_grad():
+                outputs = model.generate(input_ids, generation_config=generation_config)
+            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
             pre_response = None
             initial_response = response
             print("initial response", response)
@@ -560,11 +531,10 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                 #     generation_config=generation_config
                 # )
                 # response = tokenizer.decode(output[0][len(input_ids[0]):], skip_special_tokens=True)
-                output = llm.generate(
-                    [prompt],
-                    sampling_params=sampling_params
-                )
-                response = output[0].outputs[0].text
+                input_ids = tokenizer(prompt, return_tensors="pt").input_ids.cuda()
+                with torch.no_grad():
+                    outputs = model.generate(input_ids, generation_config=generation_config)
+                response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
                 messages.append({"role": "assistant", "content": response})
                 print("response", response)
                 if "stop checking" in response.lower():

@@ -365,7 +365,7 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                     tokenize=False,
                     add_generation_prompt=True)  
           
-            ooutput = llm.generate(
+            output = llm.generate(
                 [prompt],
                 sampling_params=sampling_params
             )

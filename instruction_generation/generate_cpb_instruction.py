@@ -173,13 +173,15 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
 
                 position = r['position']
                 args = r['arguments']
-                text = key
+                text = copy.deepcopy(token)
                 if position[0] == 1:
-                    text = '@@' + pred + '## ' + key[position[1]:] 
-                elif position[1] == len(key):
-                    text = key[0:position[0]-1] + ' @@' + pred + '##'
+                    text[position[0]-1] = '@@' + text[position[0]-1]
                 else:
-                    text = key[0:position[0]-1] + ' @@' + pred + '## ' + key[position[1]:] 
+                    text[position[0]-1] = ' @@' + text[position[0]-1]
+                if position[1] == len(text):
+                    text[position[1]-1] =text[position[1]-1]+ '##'  
+                else:
+                    text[position[1]-1] = text[position[1]-1]+ '## ' 
                 question = f"Text: {text}\n给定谓词的论元及其对应的角色是什么？谓词由@@和##给定。\n"
                 instruction += question
                 

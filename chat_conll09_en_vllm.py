@@ -97,11 +97,11 @@ def parse_args():
         help="min new tokens for generation"
     )
     parser.add_argument(
-        "--use_pred_agent", type=bool, action='store_true',
+        "--use_pred_agent", action='store_true',
         help="whether use predicate interpretation"
     )
     parser.add_argument(
-        "--use_frame_des", type=bool, action='store_true',
+        "--use_frame_des", action='store_true',
         help="whether use frame interpretation"
     )
     args = parser.parse_args()

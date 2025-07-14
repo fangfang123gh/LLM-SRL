@@ -28,28 +28,24 @@ def find_all_occurrences(key, word):
         start = idx + 1  # 支持重叠匹配，如 "aaa" 中找 "aa"
     return positions
 
-def convert_to_token_index(token, start_index, end_index):
-    token_start_index = 0
-    if start_index == 1:
-        token_start_index = 0
+def convert_to_token_index(token, word, start_index):
+    match_index = [i for i, tok in enumerate(token) if tok == word]  
+
+    if len(match_index) == 1:
+        token_index = match_index[0]
+    elif len(match_index) == 0:
+        print("生成了新的词")
+        token_index = -1
     else:
-        c = 0
-        for i, t in enumerate(token):
-            if len(t) + c == start_index - 1:
-                token_start_index = i + 1
-                break
-            c = len(t) + c
-    
-    if end_index == len(text):
-        token_end_index = len(text) - 1
-    else:
-        c = 0
-        for i, t in enumerate(token):
-            if len(t) + c == end_index:
-                token_end_index = i
-                break
-            c = len(t) + c
-    return token_start_index + 1, token_end_index + 1
+        # 选一个最近的
+        token_index = match_index[0]
+        min_dis = abs(len(''.join(token[:match_index[0]])) - start_index)
+        for match_i in match_index:
+            temp_dis = abs(len(''.join(token[:match_i])) - start_index)
+            if temp_dis < min_dis:
+                min_dis = temp_dis
+                token_index = match_i
+    return token_index
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Chat Demo")
@@ -106,11 +102,11 @@ def parse_args():
         help="min new tokens for generation"
     )
     parser.add_argument(
-        "--use_pred_agent", type=bool, action='store_true',
+        "--use_pred_agent", action='store_true',
         help="whether use predicate interpretation"
     )
     parser.add_argument(
-        "--use_frame_des", type=bool, action='store_true',
+        "--use_frame_des", action='store_true',
         help="whether use frame interpretation"
     )
     args = parser.parse_args()
@@ -146,7 +142,6 @@ llm = LLM(
 
 print('Initialization Finished')
 
-datas = {}
 pred_pattern = r"@@(.*?)##"
 rl_pattern = r"<([^<>]+)>([^<>]+)</\1>"
 
@@ -162,7 +157,6 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
         key = data['text'] 
         text = key[:]
         token = data['token']
-        datas[text] = []
         if args.use_pred_agent:
             i = 0
             maybe_pred_pos = []
@@ -225,6 +219,7 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
             question = f'文本: {key}\n在进行语义角色标注任务时，给定文本中的谓词是什么？该文本中可能的谓词结果为: {all_maybe_pr_str}\n其中谓词由@@和##给定。\n结合给定的可能的谓词结果，请重新编写给定文本，并使用@@和##分别标记谓词的开头和结尾。注意没有出现在谓词结果的词也可能是谓词。\n'+pred_agent_des
         else:
             question = f'文本: {key}\n在进行语义角色标注任务时，给定文本中的谓词是什么？请重新编写给定文本，并使用@@和##分别标记谓词的开头和结尾。'
+        print("question", question)
         messages.append({"role": "user", "content": question})
         prompt = tokenizer.apply_chat_template(
                     messages,
@@ -291,7 +286,7 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
 
         if response == "":
             json_string = json.dumps(
-                {'text': text, 'srl': datas[text], 'token':token},
+                {'text': text, 'srl': [], 'token':token},
                 ensure_ascii=False
             )
             fout.write(json_string + "\n")
@@ -336,8 +331,13 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                             min_dis = temp_dis
                             index = match_i
                 pred_arg = {'pred': word, 'position': [index, index + len(word) - 1], 'arguments': []}
-            token_start_index, token_end_index = convert_to_token_index(token, pred_arg['position'][0], pred_arg['position'][1])
-            pred_arg['position'] = [token_start_index, token_end_index]
+            token_start_index = convert_to_token_index(token, word, pred_arg['position'][0])
+            if token_start_index == -1:
+                continue
+            else:
+
+                
+                pred_arg['position'] = [token_start_index+1, token_start_index+1]
             if args.dataset_type == 'cpb':
                 instruction = "在语义角色标注中，论元指的是语义上与给定谓词相关的成分或短语。它进一步描述了与句子中谓词相关的实体、动作或概念。"
                 instruction += "论元分为核心论元和附加论元。\n"
@@ -381,6 +381,7 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
                 text[position[1]-1] = text[position[1]-1]+ '## '
             text = ''.join(text) 
             question = f"Text: {text}\n给定谓词的论元及其对应的角色是什么？谓词由@@和##给定。\n"
+            print("question", question)
             instruction = question
             
             if args.use_frame_des:
@@ -483,9 +484,8 @@ with open(args.input_file, "r", encoding='utf-8') as fin, open(args.output_file,
            
             pred_arg['arguments'] = response
             preds.append(pred_arg)
-        datas[key] = preds
         json_string = json.dumps(
-            {'text': text, 'srl': datas[text], 'token':token},
+            {'text': text, 'srl': preds, 'token':token},
             ensure_ascii=False
         )
         fout.write(json_string + "\n")

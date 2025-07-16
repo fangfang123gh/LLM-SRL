@@ -20,22 +20,20 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
             token = data['token']
             text = key
             
-            pr_str = key
+            pr_str = token[:]
             sorted_result = sorted(preds, key=lambda x: x['position'][0])
-
             count = 0
             for a in sorted_result:
-                b, e = a['position']
-                if e == len(key):
-                    pr_str = pr_str[0: b-1 + count] + ' @@' + a['pred'] + '##'
-                    count += 5
-                elif b == 1:
-                    pr_str = '@@' + a['pred'] + '## ' + pr_str[e+count:]
-                    count += 5
+                position = a['position']
+                if position[0] == 1:
+                    pr_str[position[0]-1] = '@@' + pr_str[position[0]-1]
                 else:
-                    pr_str = pr_str[0: b-1 + count] + ' @@' + a['pred'] + '## ' + pr_str[e+count:]
-                    count += 6
-
+                    pr_str[position[0]-1] = ' @@' + pr_str[position[0]-1]
+                if position[1] == len(pr_str):
+                    pr_str[position[1]-1] =pr_str[position[1]-1]+ '##'  
+                else:
+                    pr_str[position[1]-1] = pr_str[position[1]-1]+ '## ' 
+            pr_str = ''.join(pr_str)
             i = 0
             maybe_pred_pos = []
             maybe_pred_token = []
@@ -99,15 +97,13 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
 
                 position = r['position']
                 args = r['arguments']
-                text = copy.deepcopy(token)
+                text = key
                 if position[0] == 1:
-                    text[position[0]-1] = '@@' + text[position[0]-1]
+                    text = '@@' + pred + '## ' + key[position[1]:] 
+                elif position[1] == len(key):
+                    text = key[0:position[0]-1] + ' @@' + pred + '##'
                 else:
-                    text[position[0]-1] = ' @@' + text[position[0]-1]
-                if position[1] == len(text):
-                    text[position[1]-1] =text[position[1]-1]+ '##'  
-                else:
-                    text[position[1]-1] = text[position[1]-1]+ '## ' 
+                    text = key[0:position[0]-1] + ' @@' + pred + '## ' + key[position[1]:] 
                 question = f"Text: {text}\n给定谓词的论元及其对应的角色是什么？谓词由@@和##给定。\n"
                 instruction += question
                 if require_rl:

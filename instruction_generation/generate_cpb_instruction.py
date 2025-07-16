@@ -99,20 +99,21 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
             token = data['token']
             text = key
             
-            pr_str = key
+            pr_str = token[:]
             sorted_result = sorted(preds, key=lambda x: x['position'][0])
             count = 0
             for a in sorted_result:
-                b, e = a['position']
-                if e == len(key):
-                    pr_str = pr_str[0: b-1 + count] + ' @@' + a['pred'] + '##'
-                    count += 5
-                elif b == 1:
-                    pr_str = '@@' + a['pred'] + '## ' + pr_str[e+count:]
-                    count += 5
+                position = a['position']
+                if position[0] == 1:
+                    pr_str[position[0]-1] = '@@' + pr_str[position[0]-1]
                 else:
-                    pr_str = pr_str[0: b-1 + count] + ' @@' + a['pred'] + '## ' + pr_str[e+count:]
-                    count += 6
+                    pr_str[position[0]-1] = ' @@' + pr_str[position[0]-1]
+                if position[1] == len(pr_str):
+                    pr_str[position[1]-1] =pr_str[position[1]-1]+ '##'  
+                else:
+                    pr_str[position[1]-1] = pr_str[position[1]-1]+ '## ' 
+            pr_str = ''.join(pr_str)
+            # print(pr_str)
             if require_pred:
                 i = 0
                 maybe_pred_pos = []
@@ -145,7 +146,7 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
                 maybe_pred_token = list(maybe_pred_token)
                 for t in maybe_pred_token:
                     if t in pred_agent:
-                        pred_agent_des += f'当{t}作为谓词时，它的意思为：{", ".join(pred_agent[t])}\n'
+                        pred_agent_des += f'当“{t}”作为谓词时，它的意思为：{", ".join(pred_agent[t])}\n'
         
 
             for r in preds:
@@ -182,6 +183,7 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
                     text[position[1]-1] =text[position[1]-1]+ '##'  
                 else:
                     text[position[1]-1] = text[position[1]-1]+ '## ' 
+                text = ''.join(text)
                 question = f"Text: {text}\n给定谓词的论元及其对应的角色是什么？谓词由@@和##给定。\n"
                 instruction += question
                 
@@ -237,20 +239,20 @@ def get_instruction_data(predicate_base_path, agent_path, data_path, save_path, 
 
                 conversations.append({"from": "human", "value": instruction})
                 gpt_template = {"from": "gpt", "value": ''.join(arg_str) }
-                print("arg_str", ''.join(arg_str) )
+                # print("arg_str", ''.join(arg_str) )
                 conversations.append(gpt_template)
 
-                datas.append({'conversations': conversations, 'system': "你是一个有语言学背景并且善于理解文本，特别是在语义角色标注方面熟练的有帮助的助手。", 'text': key, 'pred_text': text, "gold_pred": json.dumps(process_pred(pr_str), ensure_ascii=False), "gold_rl": json.dumps(process_arg(''.join(arg_str)), ensure_ascii=False)})
+                datas.append({'conversations': conversations, 'system': "你是一个有语言学背景并且善于理解文本，特别是在语义角色标注方面熟练的有帮助的助手。"})
                 
     json_data = json.dumps(datas,ensure_ascii=False)
     with open(save_path, "w", encoding='utf-8') as file:
         file.write(json_data)
 
 if __name__ == '__main__':
-    predicate_base_path = '/HOME/hitsz_mszhang/hitsz_mszhang_1/HDD_POOL/LLM_SRL/blsp-main/data_process/predicate_framset.pkl' # the predicate database path
-    agent_path = '/HOME/hitsz_mszhang/hitsz_mszhang_1/HDD_POOL/LLM_SRL/srl/chinese_predict_frameset.pkl' # the predicate agent path
-    data_path = '/HOME/hitsz_mszhang/hitsz_mszhang_1/HDD_POOL/LLM_SRL/universal_sp/data/cpb1.0/cpb_train_filter_final_all_token.jsonl' # the training data
-    save_path = '/HOME/hitsz_mszhang/hitsz_mszhang_1/HDD_POOL/LLM_SRL/srl_data/test.json'
+    predicate_base_path = '' # the predicate database path
+    agent_path = '' # the predicate agent path
+    data_path = '' # the training data
+    save_path = ''
     get_instruction_data(predicate_base_path, agent_path, data_path, save_path)
 
 
